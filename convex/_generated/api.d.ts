@@ -15,6 +15,7 @@ import type {
 } from "convex/server";
 import type * as auth from "../auth.js";
 import type * as comments from "../comments.js";
+import type * as directMessages from "../directMessages.js";
 import type * as gameSessions from "../gameSessions.js";
 import type * as http from "../http.js";
 import type * as profiles from "../profiles.js";
@@ -32,6 +33,7 @@ import type * as users from "../users.js";
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   comments: typeof comments;
+  directMessages: typeof directMessages;
   gameSessions: typeof gameSessions;
   http: typeof http;
   profiles: typeof profiles;

@@ -1,6 +1,4 @@
-/*  ---------------------------------------------------------------
-    convex/schema.ts – final authoritative schema
-    --------------------------------------------------------------- */
+// convex/schema.ts
 
 import { defineSchema, defineTable } from "convex/server";
 import { authTables } from "@convex-dev/auth/server";
@@ -20,18 +18,25 @@ const applicationTables = {
     username: v.string(),
     content:  v.string(),
   }),
+
+  // ─────────── new direct messages table ───────────
+  directMessages: defineTable({
+    fromUserId: v.id("users"),
+    toUserId:   v.id("users"),
+    content:    v.string(),
+    createdAt:  v.number(),
+  })
+    .index("by_createdAt", ["createdAt"]),
 };
 
 /*────────────────── gameplay / replay tables ──────────────*/
 const multiplayerTables = {
   gameSessions: defineTable({
-    sessionId:  v.string(),         // UUID
+    sessionId:  v.string(),
     createdBy:  v.id("users"),
-    startedAt:  v.number(),         // ms epoch
+    startedAt:  v.number(),
     status:     v.union(v.literal("active"), v.literal("done")),
-    /* 1–5 speed stages, updated by publisher */
     stage:      v.optional(v.number()),
-    /* game constants – may evolve, so keep flexible */
     config:     v.any(),
     finalScore: v.optional(v.number()),
   })
@@ -40,18 +45,17 @@ const multiplayerTables = {
 
   gameEvents: defineTable({
     sessionId: v.id("gameSessions"),
-    idx:       v.number(),                               // monotone
-    t:         v.number(),                               // ms since start
+    idx:       v.number(),
+    t:         v.number(),
     type:      v.union(v.literal("jump"), v.literal("spawn")),
-    data: v.union(
-      v.object({ playerId: v.string() }),                // jump
-      v.object({ x: v.number(), w: v.number(), h: v.number() }) // spawn
+    data:      v.union(
+      v.object({ playerId: v.string() }),
+      v.object({ x: v.number(), w: v.number(), h: v.number() })
     ),
   })
     .index("by_session_idx", ["sessionId", "idx"]),
 };
 
-/*───────────────────────── export ─────────────────────────*/
 export default defineSchema({
   ...authTables,
   ...applicationTables,
