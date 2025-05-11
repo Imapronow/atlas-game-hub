@@ -47,3 +47,77 @@ body {
 .link-text {
   @apply text-blue-500 hover:underline cursor-pointer font-medium;
 }
+
+/* Add these styles to your global CSS or component CSS */
+
+/* Neon text effects */
+.neon-text {
+  text-shadow: 0 0 5px currentColor, 0 0 10px currentColor, 0 0 20px currentColor;
+}
+
+.text-neon-cyan {
+  color: #0ff;
+}
+
+.text-neon-magenta {
+  color: #f0f;
+}
+
+.text-neon-yellow {
+  color: #ff0;
+}
+
+.bg-neon-cyan {
+  background-color: rgba(0, 255, 255, 0.8);
+}
+
+.bg-neon-magenta {
+  background-color: rgba(255, 0, 255, 0.8);
+}
+
+/* Glow effect for elements */
+.glow {
+  box-shadow: 0 0 10px #0ff, 0 0 20px rgba(0, 255, 255, 0.5);
+}
+
+/* CRT screen effect */
+.crt-overlay {
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+              linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 2px, 3px 100%;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* TV static effect */
+.tv-static {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  z-index: 99;
+}
+
+/* Animation for pulsing elements */
+@keyframes pulse {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+.animate-pulse {
+  animation: pulse 2s infinite;
+}
+
+/* Game button styles */
+button {
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 15px currentColor;
+}
+
+button:active {
+  transform: translateY(1px);
+}

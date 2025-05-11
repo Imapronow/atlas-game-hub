@@ -1,7 +1,5 @@
-/* ------------------------------------------------------------------
-   Atlas Gaming Hub – root component
-   ------------------------------------------------------------------ */
-
+// src/App.tsx
+import "./index.css";
 import {
   Authenticated,
   Unauthenticated,
@@ -32,10 +30,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-900 text-white">
-      <header className="sticky top-0 z-10 bg-gray-800/80 backdrop-blur-sm p-4 flex justify-between items-center border-b border-purple-500">
-        <h1 className="text-xl font-bold text-purple-400">Atlas Gaming Hub</h1>
-        <SignOutButton />
+    <div className="relative min-h-screen overflow-hidden bg-black">
+      <div className="crt-overlay" />
+
+      <header className="sticky top-0 z-20 glow bg-gray-800/80 backdrop-blur-sm p-4 flex justify-between items-center border-b border-neon-purple">
+        <h1 className="text-xl neon-text text-neon-purple">Atlas Gaming Hub</h1>
+        <SignOutButton/>
       </header>
 
       <main className="flex-1 p-8">
@@ -43,25 +43,24 @@ export default function App() {
           <Authenticated>
             {profile === null ? (
               <form onSubmit={handleCreateProfile} className="max-w-md mx-auto">
-                <h2 className="text-2xl font-bold mb-4 text-center text-purple-400">
+                <h2 className="text-2xl font-bold mb-4 neon-text text-neon-purple text-center">
                   Choose Your Username
                 </h2>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full p-2 rounded bg-gray-800 border border-purple-500 text-white"
+                  className="w-full p-2 rounded bg-gray-800 border border-neon-purple text-white"
                   placeholder="Enter username"
                 />
                 <button
                   type="submit"
-                  className="w-full mt-4 p-2 rounded bg-purple-600 hover:bg-purple-700 transition"
+                  className="w-full mt-4 p-2 rounded bg-neon-purple hover:bg-neon-magenta transition glow"
                 >
                   Create Profile
                 </button>
               </form>
             ) : (
-              /* ─── Logged in: sidebar + main area ─── */
               <div className="flex flex-col md:flex-row gap-8">
                 <LiveGamesSidebar />
                 <GameContent />
@@ -71,12 +70,10 @@ export default function App() {
 
           <Unauthenticated>
             <div className="text-center mb-8">
-              <h1 className="text-5xl font-bold text-purple-400 mb-4">
+              <h1 className="text-5xl neon-text text-neon-cyan mb-4">
                 Welcome to Atlas Gaming Hub
               </h1>
-              <p className="text-xl text-gray-300">
-                Sign in to start playing!
-              </p>
+              <p className="text-xl text-gray-300">Sign in to start playing!</p>
             </div>
             <SignInForm />
           </Unauthenticated>
