@@ -418,3 +418,5 @@ export default function DinoGame() {
     </div>
   );
 }
+
+// yay, dino game
