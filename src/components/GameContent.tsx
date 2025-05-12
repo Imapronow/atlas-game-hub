@@ -6,28 +6,40 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import DinoGame from "./DinoGame";
 import { ReplayModal } from "./ReplayModal";
-// ← Import the new watcher modal
 import { UserWatcherModal } from "./UserWatcherModal";
 import { toast } from "sonner";
 
 export function GameContent() {
+  // Fullscreen setup
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      gameContainerRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
   // Chat state
-  const comments    = useQuery(api.comments.listComments) || [];
+  const comments = useQuery(api.comments.listComments) || [];
   const sendComment = useMutation(api.comments.sendComment);
 
   // Past top scores
-  const topScores      = useQuery(api.gameSessions.topScores) || [];
+  const topScores = useQuery(api.gameSessions.topScores) || [];
   // Live sessions list
   const activeSessions = useQuery(api.gameSessions.listActiveSessions) || [];
-  // Quick set of userIds currently playing
   const activeUserIds = useMemo(
     () => new Set(activeSessions.map((s) => s.createdBy)),
     [activeSessions]
   );
 
   // Modal states
-  const [replayId,   setReplayId]   = useState<string | null>(null);
-  const [watchUser,  setWatchUser]  = useState<string | null>(null);
+  const [replayId, setReplayId] = useState<string | null>(null);
+  const [watchUser, setWatchUser] = useState<string | null>(null);
 
   // Chat form
   const [newComment, setNewComment] = useState("");
@@ -49,14 +61,9 @@ export function GameContent() {
 
   return (
     <>
-      {/* Replay past game */}
       {replayId && (
-        <ReplayModal
-          sessionId={replayId}
-          onClose={() => setReplayId(null)}
-        />
+        <ReplayModal sessionId={replayId} onClose={() => setReplayId(null)} />
       )}
-      {/* Live‐watch any new game by that user */}
       {watchUser && (
         <UserWatcherModal
           userId={watchUser}
@@ -66,8 +73,22 @@ export function GameContent() {
 
       <div className="flex flex-col md:flex-row gap-8">
         {/* Left: game + leaderboard */}
-        <div className="flex-1">
-          <DinoGame />
+        <div className="flex-1 flex flex-col">
+          {/* Game container with bigger size and fullscreen toggle */}
+          <div
+            ref={gameContainerRef}
+            className="relative w-full h-[600px] md:h-[800px] lg:h-[900px] bg-black rounded-lg overflow-hidden"
+          >
+            <button
+              onClick={toggleFullscreen}
+              className="absolute top-2 right-2 z-10 px-3 py-1 bg-gray-700 bg-opacity-75 text-white text-sm rounded hover:bg-opacity-100 transition"
+            >
+              {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            </button>
+            <div className="w-full h-full">
+              <DinoGame />
+            </div>
+          </div>
 
           <section className="mt-8 bg-gray-800 p-4 rounded-lg">
             <h2 className="text-2xl font-bold mb-4 text-purple-400">
@@ -84,7 +105,6 @@ export function GameContent() {
                     score={s.finalScore!}
                     isActive={isActive}
                     onReplay={() => setReplayId(s.sessionId)}
-                    // click the dot to live‐watch this user
                     onWatchUser={() =>
                       isActive && setWatchUser(s.createdBy)
                     }

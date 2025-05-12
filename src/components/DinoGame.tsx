@@ -55,22 +55,52 @@ class Particle {
   }
 }
 
+// Parallax cloud class
+class Cloud {
+  x: number;
+  y: number;
+  speed: number;
+  size: number;
+
+  constructor(canvasWidth: number) {
+    this.x = canvasWidth + Math.random() * 200;
+    this.y = 50 + Math.random() * 100;
+    this.speed = 0.2 + Math.random() * 0.3;
+    this.size = 30 + Math.random() * 50;
+  }
+
+  update(canvasWidth: number) {
+    this.x -= this.speed;
+    if (this.x < -this.size) this.x = canvasWidth + this.size;
+  }
+
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.ellipse(this.x, this.y, this.size, this.size * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 export default function DinoGame() {
   const startSession = useMutation(api.gameSessions.startSession);
-  const logEvent = useMutation(api.gameSessions.logEvent);
-  const endSession = useMutation(api.gameSessions.endSession);
+  const logEvent      = useMutation(api.gameSessions.logEvent);
+  const endSession    = useMutation(api.gameSessions.endSession);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
   const sessionIdRef = useRef<string | null>(null);
-  const idxRef = useRef(0);
-  const startMsRef = useRef(0);
-  const startedRef = useRef(false);
+  const idxRef       = useRef(0);
+  const startMsRef   = useRef(0);
+  const startedRef   = useRef(false);
   const particlesRef = useRef<Particle[]>([]);
-  const bgOffsetRef = useRef(0);
+  const bgOffsetRef  = useRef(0);
 
-  const [started, setStarted] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
-  const [score, setScore] = useState(0);
+  const [started, setStarted]     = useState(false);
+  const [gameOver, setGameOver]   = useState(false);
+  const [score, setScore]         = useState(0);
   const [highScore, setHighScore] = useState(() => {
     const stored = localStorage.getItem("dinoHighScore");
     return stored ? parseInt(stored) : 0;
@@ -94,12 +124,16 @@ export default function DinoGame() {
     if (sessionIdRef.current) return;
     const id = uuid();
     sessionIdRef.current = id;
-    startMsRef.current = Date.now();
+    startMsRef.current   = Date.now();
     await startSession({ sessionId: id, config: {} });
   };
 
-  // Create particles at a position
-  const createExplosion = (x: number, y: number, color: string, count = 10) => {
+  const createExplosion = (
+    x: number,
+    y: number,
+    color: string,
+    count = 10
+  ) => {
     for (let i = 0; i < count; i++) {
       particlesRef.current.push(new Particle(x, y, color));
     }
@@ -116,42 +150,70 @@ export default function DinoGame() {
     let rafId: number;
     let lastJump = 0;
 
+    // difficulty ramps from 0 → 1
+    let difficulty = 0;
+
+    // instantiate clouds
+    const clouds = Array.from(
+      { length: 5 },
+      () => new Cloud(canvas.width)
+    );
+
     const spawn = async () => {
       const obs = createObstacle(canvas.width);
       applyEvent("spawn", dino, obstacles, obs);
       await emit("spawn", obs as unknown as Record<string, unknown>);
-      
-      // Add spawn effect
-      createExplosion(obs.x, canvas.height - obs.h/2, "#f0f", 5);
+      createExplosion(obs.x, canvas.height - obs.h / 2, "#f0f", 5);
+      obstacles.push(obs);
     };
 
     const loop = () => {
       if (!running) return;
 
-      // Update background animation
-      bgOffsetRef.current += OBSTACLE_SPEED * 0.5;
+      // ramp difficulty
+      if (startedRef.current && difficulty < 1) {
+        difficulty += 0.0005;
+      }
+
+      // update background offset
+      const speedMul = 1 + difficulty;
+      bgOffsetRef.current += OBSTACLE_SPEED * 0.5 * speedMul;
       if (bgOffsetRef.current > 1000) bgOffsetRef.current = 0;
 
-      // Update particles
-      particlesRef.current.forEach(p => p.update());
-      particlesRef.current = particlesRef.current.filter(p => p.ttl > 0);
+      // update particles
+      particlesRef.current.forEach((p) => p.update());
+      particlesRef.current = particlesRef.current.filter((p) => p.ttl > 0);
 
-      // Start spawning/stepping once the user has pressed start
+      // update clouds
+      clouds.forEach((c) => c.update(canvas.width));
+
       if (startedRef.current) {
         const lastX = obstacles.length
           ? obstacles[obstacles.length - 1].x
           : -Infinity;
-        if (canvas.width - lastX >= 500) void spawn();
 
-        // THIS IS THE ORIGINAL GAME LOGIC - DO NOT MODIFY
+        // dynamic gap: 500 → 300 px
+        const gapThreshold = 500 - 200 * difficulty;
+        if (canvas.width - lastX >= gapThreshold) {
+          void spawn();
+        }
+
+        // move dino & obstacles
         step(dino, obstacles);
+        // extra speed
+        const extra = OBSTACLE_SPEED * difficulty;
+        obstacles.forEach((o) => (o.x -= extra));
 
-        // If dino just landed from a jump, add effect
-        if (dino.y === canvas.height - 60 && dino.vy === 0 && Date.now() - lastJump > 500) {
+        // landing effect
+        if (
+          dino.y === canvas.height - 60 &&
+          dino.vy === 0 &&
+          Date.now() - lastJump > 500
+        ) {
           createExplosion(dino.x + 20, dino.y + 60, "#0ff", 3);
         }
 
-        // collision detection - KEEPING ORIGINAL LOGIC
+        // collision
         const hit = obstacles.some(
           (o) =>
             dino.x < o.x + o.w &&
@@ -167,50 +229,41 @@ export default function DinoGame() {
               finalScore: final,
             });
           }
-          
-          // Create explosion effect
           createExplosion(dino.x + 20, dino.y + 30, "#f0f", 30);
-          
-          // Update high score
           if (final > highScore) {
             setHighScore(final);
             localStorage.setItem("dinoHighScore", final.toString());
           }
-          
           setGameOver(true);
           return;
         }
 
-        frameScore += OBSTACLE_SPEED;
+        // score
+        frameScore += OBSTACLE_SPEED * speedMul;
         setScore(Math.floor(frameScore));
       }
 
       // --- DRAWING ---
 
-      // 1) Cyberpunk background
+      // 1) Cyberpunk gradient
       const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
       grad.addColorStop(0, "#000011");
       grad.addColorStop(1, "#000044");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // 2) Draw grid lines in background for depth effect
+
+      // 2) Grid lines
       ctx.save();
       ctx.strokeStyle = "rgba(138, 43, 226, 0.3)";
       ctx.lineWidth = 1;
-      
-      // Vertical grid lines
       const gridSpacing = 50;
       const offset = bgOffsetRef.current % gridSpacing;
-      
       for (let x = -offset; x < canvas.width; x += gridSpacing) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, canvas.height);
         ctx.stroke();
       }
-      
-      // Horizontal grid lines
       for (let y = 50; y < canvas.height; y += gridSpacing) {
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -218,8 +271,8 @@ export default function DinoGame() {
         ctx.stroke();
       }
       ctx.restore();
-      
-      // 3) Draw sun/moon in the background
+
+      // 3) Sun/Moon
       const glow = 15 + Math.sin(Date.now() / 500) * 5;
       ctx.save();
       ctx.shadowBlur = glow;
@@ -230,10 +283,10 @@ export default function DinoGame() {
       ctx.fill();
       ctx.restore();
 
-      // 4) Draw particles
-      particlesRef.current.forEach(p => p.draw(ctx));
+      // 4) Particles
+      particlesRef.current.forEach((p) => p.draw(ctx));
 
-      // 5) Neon ground with pulse effect 
+      // 5) Neon ground
       ctx.save();
       ctx.shadowBlur = 10 + Math.sin(Date.now() / 300) * 5;
       ctx.shadowColor = "#8e44ad";
@@ -241,40 +294,40 @@ export default function DinoGame() {
       ctx.fillRect(0, canvas.height - 4, canvas.width, 4);
       ctx.restore();
 
-      // 6) Glowing obstacles
+      // 6) Obstacles with bounce
       for (const o of obstacles) {
-        // Make obstacle glow pulse
+        const bounce = Math.sin(Date.now() / 200 + o.x) * 5;
+        const h = o.h + bounce;
         const pulse = 15 + Math.sin(Date.now() / 400 + o.x) * 5;
-        
         ctx.save();
         ctx.shadowBlur = pulse;
         ctx.shadowColor = "#f0f";
         ctx.fillStyle = "#f0f";
-        
-        // Draw a slightly more interesting obstacle shape
         ctx.beginPath();
         ctx.moveTo(o.x, canvas.height);
-        ctx.lineTo(o.x, canvas.height - o.h);
-        ctx.lineTo(o.x + o.w/2, canvas.height - o.h - 10);
-        ctx.lineTo(o.x + o.w, canvas.height - o.h);
+        ctx.lineTo(o.x, canvas.height - h);
+        ctx.lineTo(o.x + o.w / 2, canvas.height - h - 10);
+        ctx.lineTo(o.x + o.w, canvas.height - h);
         ctx.lineTo(o.x + o.w, canvas.height);
         ctx.closePath();
         ctx.fill();
         ctx.restore();
       }
 
-      // 7) Glowing dino with trail effect
+      // 7) Dino trail
       ctx.save();
-      
-      // Make dino glow pulse
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "#0ff";
+      ctx.fillRect(dino.x - 5, dino.y + 10, 5, 40);
+      ctx.restore();
+
+      // 8) Dino glow & shape
+      ctx.save();
       const dinoPulse = 15 + Math.sin(Date.now() / 200) * 5;
       ctx.shadowBlur = dinoPulse;
       ctx.shadowColor = "#0ff";
       ctx.fillStyle = "#0ff";
-      
-      // Draw the dino with simple animation
       if (dino.vy !== 0) {
-        // Jumping pose
         ctx.beginPath();
         ctx.moveTo(dino.x, dino.y + 60);
         ctx.lineTo(dino.x + 15, dino.y);
@@ -283,7 +336,6 @@ export default function DinoGame() {
         ctx.closePath();
         ctx.fill();
       } else {
-        // Running pose (alternate between two frames)
         const frame = Math.floor(Date.now() / 100) % 2;
         if (frame === 0) {
           ctx.fillRect(dino.x, dino.y, 40, 60);
@@ -297,16 +349,14 @@ export default function DinoGame() {
           ctx.fill();
         }
       }
-      
-      // Add eye
+      // eye
       ctx.fillStyle = "#000";
       ctx.fillRect(dino.x + 30, dino.y + 10, 5, 5);
       ctx.fillStyle = "#fff";
       ctx.fillRect(dino.x + 31, dino.y + 11, 2, 2);
-      
       ctx.restore();
-      
-      // 8) Scanlines effect (subtle)
+
+      // 9) Scanlines
       ctx.save();
       ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
       for (let i = 0; i < canvas.height; i += 4) {
@@ -314,7 +364,6 @@ export default function DinoGame() {
       }
       ctx.restore();
 
-      // Schedule next frame
       rafId = requestAnimationFrame(loop);
     };
 
@@ -325,33 +374,24 @@ export default function DinoGame() {
         startedRef.current = true;
         setStarted(true);
       }
-      
-      // Only create jump effect if on the ground
       if (dino.y === canvas.height - 60) {
         lastJump = Date.now();
         createExplosion(dino.x + 20, dino.y + 60, "#0ff", 15);
       }
-      
-      // Apply jump using original game logic
       applyEvent("jump", dino, obstacles);
       await emit("jump", { playerId: "self" });
     };
-    
-    // Handle touch events for mobile
+
     const onTouch = async () => {
       if (!startedRef.current) {
         await beginSession();
         startedRef.current = true;
         setStarted(true);
       }
-      
-      // Only create jump effect if on the ground
       if (dino.y === canvas.height - 60) {
         lastJump = Date.now();
         createExplosion(dino.x + 20, dino.y + 60, "#0ff", 15);
       }
-      
-      // Apply jump using original game logic
       applyEvent("jump", dino, obstacles);
       await emit("jump", { playerId: "self" });
     };
@@ -359,13 +399,13 @@ export default function DinoGame() {
     document.addEventListener("keydown", onKey);
     canvas.addEventListener("touchstart", onTouch);
     loop();
-    
+
     return () => {
       document.removeEventListener("keydown", onKey);
       canvas.removeEventListener("touchstart", onTouch);
       cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [highScore, startSession, logEvent, endSession]);
 
   return (
     <div className="relative glow">
@@ -373,45 +413,8 @@ export default function DinoGame() {
         ref={canvasRef}
         width={800}
         height={300}
-        className="w-full rounded-lg bg-black"
+        className="w-full rounded-lg shadow-lg"
       />
-      
-      {/* Score display */}
-      <div className="absolute top-4 right-4 flex flex-col items-end space-y-2">
-        <div className="neon-text text-neon-cyan font-bold text-xl px-3 py-1 bg-black bg-opacity-50 rounded">
-          Score: {score}
-        </div>
-        {highScore > 0 && (
-          <div className="neon-text text-neon-magenta font-bold text-sm px-3 py-1 bg-black bg-opacity-50 rounded">
-            High Score: {highScore}
-          </div>
-        )}
-      </div>
-      
-      {/* Start game instructions */}
-      {!started && !gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-lg neon-text text-neon-cyan bg-black bg-opacity-70 rounded-lg">
-          <div className="text-3xl mb-6 animate-pulse">CYBER DINO RUN</div>
-          <div>Press Space / ↑ or Tap Screen to Start</div>
-        </div>
-      )}
-      
-      {/* Game over screen */}
-      {gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-          <div className="text-3xl mb-4 neon-text text-neon-magenta">GAME OVER</div>
-          <div className="mb-6 neon-text text-neon-cyan">Final Score: {score}</div>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 neon-text bg-neon-magenta text-white rounded glow"
-          >
-            Play Again
-          </button>
-        </div>
-      )}
-      
-      {/* CRT scan effect */}
-      <div className="crt-overlay absolute inset-0 pointer-events-none rounded-lg opacity-30"></div>
     </div>
   );
 }
