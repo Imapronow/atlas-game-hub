@@ -1,5 +1,4 @@
 // src/components/GameContent.tsx
-
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -10,38 +9,32 @@ import { UserWatcherModal } from "./UserWatcherModal";
 import { toast } from "sonner";
 
 export function GameContent() {
-  // Fullscreen setup
-  const gameContainerRef = useRef<HTMLDivElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      gameContainerRef.current?.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
-    }
-  };
-
-  // Chat state
-  const comments = useQuery(api.comments.listComments) || [];
+  const comments    = useQuery(api.comments.listComments) || [];
   const sendComment = useMutation(api.comments.sendComment);
 
-  // Past top scores
-  const topScores = useQuery(api.gameSessions.topScores) || [];
-  // Live sessions list
+  const rawScores = useQuery(api.gameSessions.topScores) || [];
+  const topScores = useMemo(() => {
+    const map = new Map<string, typeof rawScores[0]>();
+    for (const s of rawScores) {
+      const existing = map.get(s.createdBy);
+      if (!existing || (s.finalScore! > existing.finalScore!)) {
+        map.set(s.createdBy, s);
+      }
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => b.finalScore! - a.finalScore!
+    );
+  }, [rawScores]);
+
   const activeSessions = useQuery(api.gameSessions.listActiveSessions) || [];
-  const activeUserIds = useMemo(
+  const activeUserIds  = useMemo(
     () => new Set(activeSessions.map((s) => s.createdBy)),
     [activeSessions]
   );
 
-  // Modal states
-  const [replayId, setReplayId] = useState<string | null>(null);
+  const [replayId,  setReplayId]  = useState<string | null>(null);
   const [watchUser, setWatchUser] = useState<string | null>(null);
 
-  // Chat form
   const [newComment, setNewComment] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -72,25 +65,10 @@ export function GameContent() {
       )}
 
       <div className="flex flex-col md:flex-row gap-8">
-        {/* Left: game + leaderboard */}
         <div className="flex-1 flex flex-col">
-          {/* Game container with bigger size and fullscreen toggle */}
-          <div
-            ref={gameContainerRef}
-            className="relative w-full h-[600px] md:h-[800px] lg:h-[900px] bg-black rounded-lg overflow-hidden"
-          >
-            <button
-              onClick={toggleFullscreen}
-              className="absolute top-2 right-2 z-10 px-3 py-1 bg-gray-700 bg-opacity-75 text-white text-sm rounded hover:bg-opacity-100 transition"
-            >
-              {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-            </button>
-            <div className="w-full h-full">
-              <DinoGame />
-            </div>
-          </div>
+          <DinoGame />
 
-          <section className="mt-8 bg-gray-800 p-4 rounded-lg">
+          <section className="mt-4 bg-gray-800 p-4 rounded-lg">
             <h2 className="text-2xl font-bold mb-4 text-purple-400">
               Top Scores
             </h2>
@@ -99,7 +77,7 @@ export function GameContent() {
                 const isActive = activeUserIds.has(s.createdBy);
                 return (
                   <ScoreRow
-                    key={s.sessionId}
+                    key={s.createdBy}
                     rank={i + 1}
                     userId={s.createdBy}
                     score={s.finalScore!}
@@ -115,7 +93,6 @@ export function GameContent() {
           </section>
         </div>
 
-        {/* Right: chat */}
         <div className="bg-gray-800 p-4 rounded-lg flex flex-col h-[800px]">
           <h2 className="text-2xl font-bold mb-4 text-purple-400">Chat</h2>
           <div

@@ -37,7 +37,7 @@ class Particle {
   update() {
     this.x += this.speedX;
     this.y += this.speedY;
-    this.speedY += 0.1; // Gravity
+    this.speedY += 0.1; // gravity
     this.ttl -= 1;
     this.opacity = this.ttl / 50;
   }
@@ -55,7 +55,7 @@ class Particle {
   }
 }
 
-// Parallax cloud class
+// Parallax cloud
 class Cloud {
   x: number;
   y: number;
@@ -99,12 +99,25 @@ export default function DinoGame() {
   const bgOffsetRef  = useRef(0);
 
   const [started, setStarted]     = useState(false);
+  const [paused, setPaused]       = useState(false);
   const [gameOver, setGameOver]   = useState(false);
   const [score, setScore]         = useState(0);
   const [highScore, setHighScore] = useState(() => {
     const stored = localStorage.getItem("dinoHighScore");
     return stored ? parseInt(stored) : 0;
   });
+
+  // pause/resume on blur/focus
+  useEffect(() => {
+    const onBlur = () => setPaused(true);
+    const onFocus = () => setPaused(false);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   const emit = async (
     type: "jump" | "spawn",
@@ -149,11 +162,8 @@ export default function DinoGame() {
     let frameScore = 0;
     let rafId: number;
     let lastJump = 0;
-
-    // difficulty ramps from 0 → 1
     let difficulty = 0;
 
-    // instantiate clouds
     const clouds = Array.from(
       { length: 5 },
       () => new Cloud(canvas.width)
@@ -170,41 +180,26 @@ export default function DinoGame() {
     const loop = () => {
       if (!running) return;
 
-      // ramp difficulty
-      if (startedRef.current && difficulty < 1) {
-        difficulty += 0.0005;
-      }
-
-      // update background offset
+      if (startedRef.current && difficulty < 1) difficulty += 0.0005;
       const speedMul = 1 + difficulty;
       bgOffsetRef.current += OBSTACLE_SPEED * 0.5 * speedMul;
       if (bgOffsetRef.current > 1000) bgOffsetRef.current = 0;
 
-      // update particles
       particlesRef.current.forEach((p) => p.update());
       particlesRef.current = particlesRef.current.filter((p) => p.ttl > 0);
 
-      // update clouds
       clouds.forEach((c) => c.update(canvas.width));
 
-      if (startedRef.current) {
+      if (startedRef.current && !paused) {
         const lastX = obstacles.length
           ? obstacles[obstacles.length - 1].x
           : -Infinity;
-
-        // dynamic gap: 500 → 300 px
         const gapThreshold = 500 - 200 * difficulty;
-        if (canvas.width - lastX >= gapThreshold) {
-          void spawn();
-        }
+        if (canvas.width - lastX >= gapThreshold) void spawn();
 
-        // move dino & obstacles
         step(dino, obstacles);
-        // extra speed
-        const extra = OBSTACLE_SPEED * difficulty;
-        obstacles.forEach((o) => (o.x -= extra));
+        obstacles.forEach((o) => (o.x -= OBSTACLE_SPEED * difficulty));
 
-        // landing effect
         if (
           dino.y === canvas.height - 60 &&
           dino.vy === 0 &&
@@ -213,7 +208,6 @@ export default function DinoGame() {
           createExplosion(dino.x + 20, dino.y + 60, "#0ff", 3);
         }
 
-        // collision
         const hit = obstacles.some(
           (o) =>
             dino.x < o.x + o.w &&
@@ -238,14 +232,11 @@ export default function DinoGame() {
           return;
         }
 
-        // score
         frameScore += OBSTACLE_SPEED * speedMul;
         setScore(Math.floor(frameScore));
       }
 
-      // --- DRAWING ---
-
-      // 1) Cyberpunk gradient
+      // 1) Background gradient
       const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
       grad.addColorStop(0, "#000011");
       grad.addColorStop(1, "#000044");
@@ -272,7 +263,10 @@ export default function DinoGame() {
       }
       ctx.restore();
 
-      // 3) Sun/Moon
+      // 3) Clouds
+      clouds.forEach((c) => c.draw(ctx));
+
+      // 4) Sun/Moon glow
       const glow = 15 + Math.sin(Date.now() / 500) * 5;
       ctx.save();
       ctx.shadowBlur = glow;
@@ -283,10 +277,10 @@ export default function DinoGame() {
       ctx.fill();
       ctx.restore();
 
-      // 4) Particles
+      // 5) Particles
       particlesRef.current.forEach((p) => p.draw(ctx));
 
-      // 5) Neon ground
+      // 6) Ground
       ctx.save();
       ctx.shadowBlur = 10 + Math.sin(Date.now() / 300) * 5;
       ctx.shadowColor = "#8e44ad";
@@ -294,7 +288,7 @@ export default function DinoGame() {
       ctx.fillRect(0, canvas.height - 4, canvas.width, 4);
       ctx.restore();
 
-      // 6) Obstacles with bounce
+      // 7) Obstacles with bounce
       for (const o of obstacles) {
         const bounce = Math.sin(Date.now() / 200 + o.x) * 5;
         const h = o.h + bounce;
@@ -314,14 +308,14 @@ export default function DinoGame() {
         ctx.restore();
       }
 
-      // 7) Dino trail
+      // 8) Dino trail
       ctx.save();
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = "#0ff";
       ctx.fillRect(dino.x - 5, dino.y + 10, 5, 40);
       ctx.restore();
 
-      // 8) Dino glow & shape
+      // 9) Dino glow & shape
       ctx.save();
       const dinoPulse = 15 + Math.sin(Date.now() / 200) * 5;
       ctx.shadowBlur = dinoPulse;
@@ -349,14 +343,13 @@ export default function DinoGame() {
           ctx.fill();
         }
       }
-      // eye
       ctx.fillStyle = "#000";
       ctx.fillRect(dino.x + 30, dino.y + 10, 5, 5);
       ctx.fillStyle = "#fff";
       ctx.fillRect(dino.x + 31, dino.y + 11, 2, 2);
       ctx.restore();
 
-      // 9) Scanlines
+      // 10) Scanlines
       ctx.save();
       ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
       for (let i = 0; i < canvas.height; i += 4) {
@@ -405,7 +398,7 @@ export default function DinoGame() {
       canvas.removeEventListener("touchstart", onTouch);
       cancelAnimationFrame(rafId);
     };
-  }, [highScore, startSession, logEvent, endSession]);
+  }, [highScore, paused]);
 
   return (
     <div className="relative glow">
@@ -413,10 +406,54 @@ export default function DinoGame() {
         ref={canvasRef}
         width={800}
         height={300}
-        className="w-full rounded-lg shadow-lg"
+        className="w-full rounded-lg bg-black"
       />
+
+      {/* Score */}
+      <div className="absolute top-4 right-4 z-10 flex flex-col items-end space-y-2">
+        <div className="neon-text text-neon-cyan font-bold text-xl px-3 py-1 bg-black bg-opacity-50 rounded">
+          Score: {score}
+        </div>
+        {highScore > 0 && (
+          <div className="neon-text text-neon-magenta font-bold text-sm px-3 py-1 bg-black bg-opacity-50 rounded">
+            High Score: {highScore}
+          </div>
+        )}
+      </div>
+
+      {/* Start */}
+      {!started && !gameOver && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-lg neon-text text-neon-cyan bg-black bg-opacity-70 rounded-lg">
+          <div className="text-3xl mb-6 animate-pulse">CYBER DINO RUN</div>
+          <div>Press Space / ↑ or Tap Screen to Start</div>
+        </div>
+      )}
+
+      {/* Paused */}
+      {paused && started && !gameOver && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <div className="text-3xl neon-text text-neon-cyan bg-black bg-opacity-70 px-4 py-2 rounded">
+            PAUSED
+          </div>
+        </div>
+      )}
+
+      {/* Game Over */}
+      {gameOver && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
+          <div className="text-3xl mb-4 neon-text text-neon-magenta">GAME OVER</div>
+          <div className="mb-6 neon-text text-neon-cyan">Final Score: {score}</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 neon-text bg-neon-magenta text-white rounded glow"
+          >
+            Play Again
+          </button>
+        </div>
+      )}
+
+      {/* CRT overlay */}
+      <div className="crt-overlay absolute inset-0 pointer-events-none rounded-lg opacity-30 z-0" />
     </div>
   );
 }
-
-// yay, dino game
