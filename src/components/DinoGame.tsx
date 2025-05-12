@@ -14,39 +14,27 @@ import { v4 as uuid } from "uuid";
 
 // Simple particle system for effects
 class Particle {
-  x: number;
-  y: number;
-  size: number;
-  speedX: number;
-  speedY: number;
-  color: string;
-  opacity: number;
-  ttl: number;
-
+  x: number; y: number; size: number; speedX: number;
+  speedY: number; color: string; opacity: number; ttl: number;
   constructor(x: number, y: number, color: string) {
-    this.x = x;
-    this.y = y;
+    this.x = x; this.y = y;
     this.size = Math.random() * 4 + 1;
     this.speedX = Math.random() * 6 - 3;
     this.speedY = Math.random() * -4 - 1;
-    this.color = color;
-    this.opacity = 1;
+    this.color = color; this.opacity = 1;
     this.ttl = 30 + Math.random() * 20;
   }
-
   update() {
     this.x += this.speedX;
     this.y += this.speedY;
-    this.speedY += 0.1; // gravity
+    this.speedY += 0.1;
     this.ttl -= 1;
     this.opacity = this.ttl / 50;
   }
-
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.globalAlpha = this.opacity;
-    ctx.shadowBlur = 5;
-    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 5; ctx.shadowColor = this.color;
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
@@ -57,29 +45,23 @@ class Particle {
 
 // Parallax cloud
 class Cloud {
-  x: number;
-  y: number;
-  speed: number;
-  size: number;
-
+  x: number; y: number; speed: number; size: number;
   constructor(canvasWidth: number) {
     this.x = canvasWidth + Math.random() * 200;
     this.y = 50 + Math.random() * 100;
     this.speed = 0.2 + Math.random() * 0.3;
     this.size = 30 + Math.random() * 50;
   }
-
   update(canvasWidth: number) {
     this.x -= this.speed;
     if (this.x < -this.size) this.x = canvasWidth + this.size;
   }
-
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
     ctx.globalAlpha = 0.3;
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.ellipse(this.x, this.y, this.size, this.size * 0.6, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.x, this.y, this.size, this.size * 0.6, 0, 0, 2 * Math.PI);
     ctx.fill();
     ctx.restore();
   }
@@ -164,42 +146,57 @@ export default function DinoGame() {
     let lastJump = 0;
     let difficulty = 0;
 
-    const clouds = Array.from(
-      { length: 5 },
-      () => new Cloud(canvas.width)
-    );
+    // clouds
+    const clouds = Array.from({ length: 5 }, () => new Cloud(canvas.width));
 
-    const spawn = async () => {
-      const obs = createObstacle(canvas.width);
-      applyEvent("spawn", dino, obstacles, obs);
-      await emit("spawn", obs as unknown as Record<string, unknown>);
-      createExplosion(obs.x, canvas.height - obs.h / 2, "#f0f", 5);
-      obstacles.push(obs);
+    // spawn timing
+    let lastSpawn = Date.now();
+    let spawnInterval = 1200 + Math.random() * 1300; // ms
+
+    const spawnGroup = async () => {
+      const clusterCount = Math.random() < 0.3 ? 2 + Math.floor(Math.random() * 2) : 1;
+      for (let i = 0; i < clusterCount; i++) {
+        const obs = createObstacle(canvas.width + i * 60);
+        applyEvent("spawn", dino, obstacles, obs);
+        obstacles.push(obs);
+        createExplosion(obs.x, canvas.height - obs.h / 2, "#f0f", 5);
+        await emit("spawn", { ...obs } as any);
+      }
     };
 
     const loop = () => {
       if (!running) return;
 
+      // ramp difficulty [0–1]
       if (startedRef.current && difficulty < 1) difficulty += 0.0005;
-      const speedMul = 1 + difficulty;
-      bgOffsetRef.current += OBSTACLE_SPEED * 0.5 * speedMul;
+
+      // compute speed like Chrome dino
+      const speed = 6 * (1 + difficulty); // base 6px/frame
+      bgOffsetRef.current += speed * 0.5;
       if (bgOffsetRef.current > 1000) bgOffsetRef.current = 0;
 
-      particlesRef.current.forEach((p) => p.update());
-      particlesRef.current = particlesRef.current.filter((p) => p.ttl > 0);
+      // particles
+      particlesRef.current.forEach(p => p.update());
+      particlesRef.current = particlesRef.current.filter(p => p.ttl > 0);
 
-      clouds.forEach((c) => c.update(canvas.width));
+      // clouds
+      clouds.forEach(c => c.update(canvas.width));
 
       if (startedRef.current && !paused) {
-        const lastX = obstacles.length
-          ? obstacles[obstacles.length - 1].x
-          : -Infinity;
-        const gapThreshold = 500 - 200 * difficulty;
-        if (canvas.width - lastX >= gapThreshold) void spawn();
+        // time-based spawn
+        if (Date.now() - lastSpawn > spawnInterval) {
+          void spawnGroup();
+          lastSpawn = Date.now();
+          spawnInterval = 1200 + Math.random() * 1300;
+        }
 
+        // physics step
         step(dino, obstacles);
-        obstacles.forEach((o) => (o.x -= OBSTACLE_SPEED * difficulty));
+        // adjust obstacles to match `speed` if OBSTACLE_SPEED differs
+        const delta = speed - OBSTACLE_SPEED;
+        if (delta !== 0) obstacles.forEach(o => (o.x -= delta));
 
+        // landing effect
         if (
           dino.y === canvas.height - 60 &&
           dino.vy === 0 &&
@@ -208,8 +205,9 @@ export default function DinoGame() {
           createExplosion(dino.x + 20, dino.y + 60, "#0ff", 3);
         }
 
+        // collision
         const hit = obstacles.some(
-          (o) =>
+          o =>
             dino.x < o.x + o.w &&
             dino.x + 40 > o.x &&
             dino.y + 60 > canvas.height - o.h
@@ -218,10 +216,7 @@ export default function DinoGame() {
           running = false;
           const final = Math.floor(frameScore);
           if (sessionIdRef.current) {
-            endSession({
-              sessionId: sessionIdRef.current,
-              finalScore: final,
-            });
+            endSession({ sessionId: sessionIdRef.current, finalScore: final });
           }
           createExplosion(dino.x + 20, dino.y + 30, "#f0f", 30);
           if (final > highScore) {
@@ -232,55 +227,50 @@ export default function DinoGame() {
           return;
         }
 
-        frameScore += OBSTACLE_SPEED * speedMul;
+        // scoring
+        frameScore += speed;
         setScore(Math.floor(frameScore));
       }
 
-      // 1) Background gradient
+      // --- DRAW ---
+      // 1) gradient
       const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
       grad.addColorStop(0, "#000011");
       grad.addColorStop(1, "#000044");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 2) Grid lines
+      // 2) grid
       ctx.save();
       ctx.strokeStyle = "rgba(138, 43, 226, 0.3)";
       ctx.lineWidth = 1;
-      const gridSpacing = 50;
-      const offset = bgOffsetRef.current % gridSpacing;
-      for (let x = -offset; x < canvas.width; x += gridSpacing) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
+      const spacing = 50;
+      const off = bgOffsetRef.current % spacing;
+      for (let x = -off; x < canvas.width; x += spacing) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       }
-      for (let y = 50; y < canvas.height; y += gridSpacing) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
+      for (let y = 50; y < canvas.height; y += spacing) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       }
       ctx.restore();
 
-      // 3) Clouds
-      clouds.forEach((c) => c.draw(ctx));
+      // 3) clouds draw
+      clouds.forEach(c => c.draw(ctx));
 
-      // 4) Sun/Moon glow
+      // 4) sun/moon
       const glow = 15 + Math.sin(Date.now() / 500) * 5;
       ctx.save();
-      ctx.shadowBlur = glow;
-      ctx.shadowColor = "#FF1493";
+      ctx.shadowBlur = glow; ctx.shadowColor = "#FF1493";
       ctx.fillStyle = "#FF1493";
       ctx.beginPath();
-      ctx.arc(canvas.width - 80, 60, 30, 0, Math.PI * 2);
+      ctx.arc(canvas.width - 80, 60, 30, 0, 2 * Math.PI);
       ctx.fill();
       ctx.restore();
 
-      // 5) Particles
-      particlesRef.current.forEach((p) => p.draw(ctx));
+      // 5) particles
+      particlesRef.current.forEach(p => p.draw(ctx));
 
-      // 6) Ground
+      // 6) ground
       ctx.save();
       ctx.shadowBlur = 10 + Math.sin(Date.now() / 300) * 5;
       ctx.shadowColor = "#8e44ad";
@@ -288,14 +278,13 @@ export default function DinoGame() {
       ctx.fillRect(0, canvas.height - 4, canvas.width, 4);
       ctx.restore();
 
-      // 7) Obstacles with bounce
+      // 7) obstacles bounce & glow
       for (const o of obstacles) {
         const bounce = Math.sin(Date.now() / 200 + o.x) * 5;
         const h = o.h + bounce;
         const pulse = 15 + Math.sin(Date.now() / 400 + o.x) * 5;
         ctx.save();
-        ctx.shadowBlur = pulse;
-        ctx.shadowColor = "#f0f";
+        ctx.shadowBlur = pulse; ctx.shadowColor = "#f0f";
         ctx.fillStyle = "#f0f";
         ctx.beginPath();
         ctx.moveTo(o.x, canvas.height);
@@ -308,19 +297,17 @@ export default function DinoGame() {
         ctx.restore();
       }
 
-      // 8) Dino trail
+      // 8) dino trail
       ctx.save();
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = "#0ff";
       ctx.fillRect(dino.x - 5, dino.y + 10, 5, 40);
       ctx.restore();
 
-      // 9) Dino glow & shape
+      // 9) dino glow & shape
       ctx.save();
-      const dinoPulse = 15 + Math.sin(Date.now() / 200) * 5;
-      ctx.shadowBlur = dinoPulse;
-      ctx.shadowColor = "#0ff";
-      ctx.fillStyle = "#0ff";
+      const dp = 15 + Math.sin(Date.now() / 200) * 5;
+      ctx.shadowBlur = dp; ctx.shadowColor = "#0ff"; ctx.fillStyle = "#0ff";
       if (dino.vy !== 0) {
         ctx.beginPath();
         ctx.moveTo(dino.x, dino.y + 60);
@@ -349,9 +336,9 @@ export default function DinoGame() {
       ctx.fillRect(dino.x + 31, dino.y + 11, 2, 2);
       ctx.restore();
 
-      // 10) Scanlines
+      // 10) scanlines
       ctx.save();
-      ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
+      ctx.fillStyle = "rgba(0,0,0,0.1)";
       for (let i = 0; i < canvas.height; i += 4) {
         ctx.fillRect(0, i, canvas.width, 1);
       }
@@ -409,7 +396,7 @@ export default function DinoGame() {
         className="w-full rounded-lg bg-black"
       />
 
-      {/* Score */}
+      {/* Score HUD */}
       <div className="absolute top-4 right-4 z-10 flex flex-col items-end space-y-2">
         <div className="neon-text text-neon-cyan font-bold text-xl px-3 py-1 bg-black bg-opacity-50 rounded">
           Score: {score}
@@ -421,7 +408,7 @@ export default function DinoGame() {
         )}
       </div>
 
-      {/* Start */}
+      {/* Start Screen */}
       {!started && !gameOver && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-lg neon-text text-neon-cyan bg-black bg-opacity-70 rounded-lg">
           <div className="text-3xl mb-6 animate-pulse">CYBER DINO RUN</div>
@@ -452,8 +439,8 @@ export default function DinoGame() {
         </div>
       )}
 
-      {/* CRT overlay */}
-      <div className="crt-overlay absolute inset-0 pointer-events-none rounded-lg opacity-30 z-0" />
+      {/* CRT Overlay */}
+      <div className="crt-overlay absolute inset-0 pointer-events-none rounded-lg opacity-30 z-0"></div>
     </div>
   );
 }
